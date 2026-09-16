@@ -28,6 +28,18 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- Serves Swagger UI (see /swagger-ui/index.html) for interactively trying the API
+             against a running instance. The spec itself is hand-written at
+             src/main/resources/static/openapi.yaml, not generated from annotations — this
+             dependency only supplies the UI, pointed at that file via
+             springdoc.swagger-ui.url in application.properties. Version pinned explicitly
+             (not inherited from spring-boot-starter-parent, which doesn't manage it): 3.x is
+             the springdoc major line built against Spring Boot 4 / Spring Framework 7. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>3.1.1</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

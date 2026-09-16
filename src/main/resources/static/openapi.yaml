@@ -1,0 +1,197 @@
+openapi: 3.0.3
+info:
+  title: Concurrent Ledger Service
+  description: >
+    Create accounts, read balances, and post idempotent transfers between accounts.
+    Every operation below can be run for real against this running instance via
+    "Try it out".
+  version: v1
+servers:
+  - url: http://localhost:8080/
+
+paths:
+  /accounts:
+    post:
+      tags: [Accounts]
+      summary: Create an account
+      description: >
+        openingBalance must be zero or positive, with at most 2 decimal places
+        (a bare integer like 100 is accepted and padded to 100.00).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '201':
+          description: Account created
+          headers:
+            Location:
+              description: Path of the newly created account, e.g. /accounts/1
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '400':
+          description: openingBalance is missing, negative, or has more than 2 decimal places
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                title: Bad Request
+                status: 400
+                detail: "balance must not be negative: -0.01"
+                instance: /accounts
+
+  /accounts/{id}:
+    get:
+      tags: [Accounts]
+      summary: Get an account's current balance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "1"
+      responses:
+        '200':
+          description: Account found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '404':
+          description: No account exists with this id
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                title: Not Found
+                status: 404
+                detail: "no account with id 999"
+                instance: /accounts/999
+
+  /transfers:
+    post:
+      tags: [Transfers]
+      summary: Transfer money between two accounts
+      description: >
+        The caller generates the Idempotency-Key (a UUID is the usual choice) once
+        per intended transfer, and resends the exact same key to retry it. Repeating
+        a key returns the original outcome without transferring again, even if the
+        retry arrives while the original is still being processed. A retry with a
+        different body under an already-used key still gets the original outcome —
+        the new body is ignored, not compared against the old one.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >
+            Caller-generated key identifying this transfer attempt; reuse the same
+            value to safely retry.
+          schema:
+            type: string
+          example: b3a1c2d4-1234-4a5b-9abc-0123456789ab
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+      responses:
+        '204':
+          description: Transfer applied
+        '400':
+          description: >
+            Missing/blank Idempotency-Key or fromAccountId/toAccountId, self-transfer,
+            or an invalid amount
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                title: Bad Request
+                status: 400
+                detail: "Idempotency-Key must not be blank"
+                instance: /transfers
+        '404':
+          description: fromAccountId or toAccountId does not exist
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                title: Not Found
+                status: 404
+                detail: "no account with id 999"
+                instance: /transfers
+        '409':
+          description: fromAccountId has insufficient funds
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                title: Conflict
+                status: 409
+                detail: "account 1 has insufficient funds: requested 100.00, available 50.00"
+                instance: /transfers
+
+components:
+  schemas:
+    CreateAccountRequest:
+      type: object
+      required: [openingBalance]
+      properties:
+        openingBalance:
+          type: number
+          minimum: 0
+          example: 100.00
+
+    AccountResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "1"
+        balance:
+          type: number
+          example: 100.00
+
+    TransferRequest:
+      type: object
+      required: [fromAccountId, toAccountId, amount]
+      properties:
+        fromAccountId:
+          type: string
+          example: "1"
+        toAccountId:
+          type: string
+          example: "2"
+        amount:
+          type: number
+          exclusiveMinimum: true
+          minimum: 0
+          example: 25.00
+
+    ProblemDetail:
+      type: object
+      description: Problem details — the shape of every error response.
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
